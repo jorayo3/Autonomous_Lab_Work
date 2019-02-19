@@ -3,14 +3,14 @@ module a_Star
 using DataStructures
 
 "Key coordinates"
-sourceX = 0 #row
-sourceY = 0 #column
-goalX = 3
-goalY = 3
+sourceX = 1 #row
+sourceY = 1 #column
+goalX = 4
+goalY = 4
 
 "Grid Size"
-xMax = 3
-yMax = 3
+xMax = 4
+yMax = 4
 
 type Node
 	x::Int64
@@ -27,14 +27,14 @@ function calc_h(x::Int64, y::Int64, goalX::Int64, goalY::Int64)
 end
 
 function verifyNode(node::Node, xMax::Int64, yMax::Int64)
-	if (node.x < 0 || node.x > xMax || node.y < 0 || node.y > yMax) 
+	if (node.x < 1 || node.x > xMax || node.y < 1 || node.y > yMax) 
 		return false
 	end
 	return node.unblocked
 end
 
 function isValid(x::Int64, y::Int64)
-	if (x < 0 || x > xMax || y < 0 || y > yMax)
+	if (x < 1 || x > xMax || y < 1 || y > yMax)
 		return false
 	end
 	return true
@@ -42,9 +42,9 @@ end
 
 #@To-DO find a better way to implement
 function findNextStep(Open_List, Grid)
-	minNode = Node(-1,-1,Inf,Inf,false,0)
-	for i = 1:yMax
-		for j = 1:xMax
+	minNode = Node(0,0,Inf,Inf,false,0)
+	for i = 1:xMax
+		for j = 1:yMax
 			if (Open_List[i,j] == true 
 				&& minNode.costf > Grid[i,j].costf)
 				minNode = Grid[i,j]
@@ -55,24 +55,27 @@ function findNextStep(Open_List, Grid)
 	return minNode
 end
 
-function evaluateNextNode(xOld::Int32, yOld::Int32, 
-							xNew::Int32, yNew::Int32, Adjacent::Bool)
+function evaluateNextNode(xOld::Int64, yOld::Int64, 
+							xNew::Int64, yNew::Int64, 
+							Adjacent::Bool, Open_List)
 	if (Adjacent == true)
 		addG = 1
     else
     	addG = sqrt(2)
     end
-
-	gNew = Grid[xOld, yOld].g + addG
+	gNew = Grid[xOld, yOld].costg + addG
     fNew = gNew + calc_h(xNew, yNew, goalX, goalY)
-
-	if (Grid[xNew, yNew].f > fNew)
+	if (Grid[xNew, yNew].costf > fNew)
 		Open_List[xNew, yNew] = true
-        Grid[xNew, yNew].f = fNew
-        Grid[xNew, yNew].g = gNew
+        Grid[xNew, yNew].costf = fNew
+        Grid[xNew, yNew].costg = gNew
         Grid[xNew, yNew].pInd = calc_Index(xOld,yOld)
     end
 
+end
+
+function isDestination(x::Int64,y::Int64)
+	return (x == goalX && y == goalY)
 end
 
 function a_StarSearch(xMax::Int64, yMax::Int64, sourceX::Int64, sourceY::Int64, 
@@ -94,30 +97,24 @@ function a_StarSearch(xMax::Int64, yMax::Int64, sourceX::Int64, sourceY::Int64,
 	Open_List = falses(xMax,yMax)
 	Closed_List = falses(xMax,yMax)
 
-	i = sourceY
-	j = sourceX
-	Grid[i,j].f = 0
-	Grid[i,j].g = 0
+	i = sourceX
+	j = sourceY
+	Grid[i,j].costf = 0
+	Grid[i,j].costg = 0
 	Open_List[i,j] = true
 
-	while (Open_List != false)
+	while (Open_List != falses(xMax,yMax))
 
 		currentNode = findNextStep(Open_List, Grid) #pull lowest costing open Node
-	    i = currentNode.y
-	    j = currentNode.x
+	    i = currentNode.x
+	    j = currentNode.y
 
 	    Open_List[i,j] = false
 	    Closed_List[i,j] = true
 
-	    fNew::Float64
-	    gNew::Float64
-
 	    #Check Next Nodes
-	    iNew::Int64
-	    jNew::Int64
 	   	for iNew = i-1:i+1
 	   		for jNew = j-1:j+1
-	   			Adjacent::Bool
 	   			if (iNew == i && jNew == j)
 	   				continue
 	   			elseif (iNew == i || jNew == j)
@@ -129,13 +126,15 @@ function a_StarSearch(xMax::Int64, yMax::Int64, sourceX::Int64, sourceY::Int64,
     			if (isValid(iNew, jNew))
     				if (Closed_List[iNew, jNew] == false && 
         						Grid[iNew, jNew].unblocked == true)
-        				evaluateNextNode(i, j, iNew, jNew, Adjacent)
+        				evaluateNextNode(i, j, iNew, jNew, Adjacent, Open_List)
         			end
 
         			if (isDestination(iNew, jNew))
         				println("Goal Found")
         				println("Printing Path")
         				printMap()
+        				println("Printing Searched Nodes")
+        				println(Closed_List)
         				return
         			end
         		end
@@ -148,45 +147,45 @@ function a_StarSearch(xMax::Int64, yMax::Int64, sourceX::Int64, sourceY::Int64,
 
 end
 
-function calc_Index(i::Int64, j::Int64)
-	index = (yMax*j - (yMax-i))
+function calc_Index(x::Int64, y::Int64)
+	index = (xMax*y - (xMax-x))
 	return index
 end
 
 function printMap()
-	s = Stack{Int}()
-	index = calc_Index(goalY,goalX)
-
-	while(index != calc_Index(sourceY,sourceX))
-		push!(s,index)
-		index = Grid[index].pInd
-	end
-
+	s = []
+	index = calc_Index(goalX,goalY)
 	while(true)
-		index = pop!(s)
-		println(index)
-		if (index == calc_Index(sourceY,sourceX))
-			return
+		push!(s,index)
+		if index == calc_Index(sourceX,sourceY)
+			break
+		else index = Grid[index].pInd
 		end
 	end
+
+	while(!isempty(s))
+		index = pop!(s)
+		println(index)
+	end
+	return
 end
 
 function constructGrid(map::Array{Int64})
 	Grid = Array{Node}(xMax, yMax)
-	for i=1:yMax
-		for j=1:xMax
-			Grid[i,j] = Node(j,i,Inf,Inf,map[i,j],-1)
+	for i=1:xMax
+		for j=1:yMax
+			Grid[i,j] = Node(i,j,Inf,Inf,map[i,j],-1)
 		end
 	end
 	return Grid
 end
 
-Open = [1 0 0;
-		0 1 0;
-		1 0 1]
+Open = [1 0 1 1;
+		1 0 1 1;
+		1 1 1 1;
+		1 0 1 1]
 Grid = constructGrid(Open)
-println(Grid[1,3])
-println(findNextStep(Open,Grid))
-println(Open[2,3])
+a_StarSearch(xMax, yMax, sourceX, sourceY, 
+				goalX, goalY, Grid)
 
 end #module
