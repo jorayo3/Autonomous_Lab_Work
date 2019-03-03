@@ -1,7 +1,9 @@
 module a_Star
 
 using DataStructures
+using NearestNeighbors
 using PyPlot
+#using Plots
 
 "Key coordinates"
 sourceX = 1 #row
@@ -9,15 +11,11 @@ sourceY = 1 #column
 goalX = 4
 goalY = 7
 
-"Grid Size"
-xMax = 4
-yMax = 4
-
 type Node
 	x::Int64
 	y::Int64
-	costf::Float64
-	costg::Float64
+	costG::Float64
+	costH::Float64
 	pInd::Int64
 end
 
@@ -46,20 +44,19 @@ function evaluateNextNode(xOld::Int64, yOld::Int64,
     	addG = sqrt(2)
     end
     
-    gNew = currentNode.costg + addG
-   	fNew = gNew + calc_h(xNew, yNew, goalX, goalY)
+    gNew = currentNode.costG + addG
 
     if (!haskey(Open_List, newIndex))
-    	newNode = Node(xNew, yNew, gNew, fNew, cIndex)
+    	costH = calc_h(xNew, yNew, goalX, goalY)
+    	newNode = Node(xNew, yNew, gNew, costH, cIndex)
     	Open_List[newIndex] = newNode
-    	enqueue!(pq, newIndex, newNode.costf)
+    	enqueue!(pq, newIndex, gNew + costH)
     else
     	newNode = Open_List[newIndex]
-		if (newNode.costf > fNew)
-        	newNode.costf = fNew
-        	newNode.costg = gNew
+		if (newNode.costG > gNew)
+        	newNode.costG = gNew
         	newNode.pInd = cIndex
-        	pq[newIndex] = fNew
+        	pq[newIndex] = gNew + newNode.costH
     	end
     end
 end
@@ -86,8 +83,8 @@ function a_StarSearch(xMax::Int64, yMax::Int64, sourceX::Int64, sourceY::Int64,
 		return
 	end
 
-	goalN = Node(goalX, goalY, 0, 0, -1) #initiallize goal node
-	sourceN = Node(sourceX, sourceY, 0, 0,-1) #initialize source node
+	goalN = Node(goalX, goalY, 0, -1, -1) #initiallize goal node
+	sourceN = Node(sourceX, sourceY, 0, -1, -1) #initialize source node
 	cIndex = Index(sourceX,sourceY)
 
 	Open_List, Closed_List = Dict{Int64,Node}(), Dict{Int64,Node}()
@@ -96,7 +93,6 @@ function a_StarSearch(xMax::Int64, yMax::Int64, sourceX::Int64, sourceY::Int64,
 	pq = PriorityQueue()
 	enqueue!(pq, cIndex, 0)
 	
-	println("Printing expanded nodes:")
 	while (length(Open_List) > 0)
 
 		cIndex = dequeue!(pq) #pull lowest costing open Node
@@ -106,7 +102,6 @@ function a_StarSearch(xMax::Int64, yMax::Int64, sourceX::Int64, sourceY::Int64,
 
 	    i = currentNode.x
 	    j = currentNode.y
-	    println(i,j)
 	    
 	    #Check Next Nodes
 	   	for iNew = i-1:i+1
@@ -131,8 +126,9 @@ function a_StarSearch(xMax::Int64, yMax::Int64, sourceX::Int64, sourceY::Int64,
         				println("Printing Path:")
         				goalN.pInd = cIndex
         				Closed_List[Index(goalN.x,goalN.y)] = goalN
-        				printMap(Closed_List)
-        				return
+        				px, py = GetPath(Closed_List)
+        				ex, ey = GetExpandedNodes(Closed_List)
+        				return px, py, ex, ey
         			end
         		end
         	end
@@ -149,18 +145,46 @@ function Index(x::Int64, y::Int64)
 	return index
 end
 
-function printMap(Closed_List)
-	s = []
+function GetPath(Closed_List)
+	px = []
+	py = []
 	index = Index(goalX,goalY)
-	while(index != Index(sourceX,sourceY))
-		push!(s,index)
-		index = Closed_List[index].pInd
+	while(true)
+		n = Closed_List[index]
+		push!(px,n.x)
+		push!(py,n.y)
+		index = n.pInd
+		if (index == Index(sourceX,sourceY))
+			break
+		end
 	end
-	push!(s,index)
-	while(!isempty(s))
-		index = pop!(s)
-		println(index)
+
+	return px, py
+end
+
+function GetExpandedNodes(Closed_List)
+	ex = []
+	ey = []
+	for i in values(Closed_List)
+		push!(ex,i.x)
+		push!(ey,i.y)
 	end
+
+	return ex, ey
+end
+
+function initializeObstacles(ox::Array{Float64}, oy::Array{Float64}, vr::Int64)
+	Open = fill(1, (60,60))
+	kdtree = KDTree(hcat(ox, oy)')
+    for x in 1:60
+        for y in 1:60
+            idxs, onedist = knn(kdtree, [x, y] , 1)
+            if onedist[1] <= vr 
+                Open[x,y] = 0
+            end
+        end
+    end
+    return Open
 end
 
 # Build Test Cases
@@ -175,9 +199,55 @@ Open = [1 0 1 0 1 1 1;
 		0 1 0 1 0 1 0;
 		0 1 1 1 1 0 1] #Interesting path due to heuristic. Would work with different one.
 
-xMax = size(Open,1)
-yMax = size(Open,2)
-a_StarSearch(xMax, yMax, sourceX, sourceY, 
-				goalX, goalY, Open)
+	xMax = 60
+	yMax = 60
+    sourceX = 10  # [m]
+    sourceY = 10  # [m]
+    goalX = 50  # [m]
+    goalY = 50  # [m]
 
+    ox = Float64[]
+    oy = Float64[]
+
+    for i in 1:60.0
+        push!(ox, Float64(i))
+        push!(oy, 1.0)
+    end
+    for i in 1:60.0
+        push!(ox, 60.0)
+        push!(oy, Float64(i))
+    end
+    for i in 1:60.0
+        push!(ox, Float64(i))
+        push!(oy, 60.0)
+    end
+    for i in 1:60.0
+        push!(ox, 1.0)
+        push!(oy, Float64(i))
+    end
+    for i in 1:40.0
+        push!(ox, 20.0)
+        push!(oy, Float64(i))
+    end
+    for i in 1:40.0
+        push!(ox, 40.0)
+        push!(oy, 60.0-Float64(i))
+    end
+
+vr = 5
+Open = initializeObstacles(ox, oy, vr)
+
+
+px, py, ex, ey = a_StarSearch(xMax, yMax, sourceX, sourceY, 
+				goalX, goalY, Open)
+ plot(ox, oy, ".k",label="obstacles")
+ plot(sourceX, sourceY, "xr",label="start")
+ plot(goalX, goalY, "xb",label="goal")
+ plot(px, py, "-r",label="A* path")
+
+#display(plot(ex,ey,seriestype=:scatter,title="My Scatter Plot"))
+legend()
+grid(true)
+axis("equal")
+show()
 end #module
