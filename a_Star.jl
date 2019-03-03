@@ -1,12 +1,13 @@
 module a_Star
 
 using DataStructures
+using PyPlot
 
 "Key coordinates"
 sourceX = 1 #row
 sourceY = 1 #column
 goalX = 4
-goalY = 4
+goalY = 7
 
 "Grid Size"
 xMax = 4
@@ -17,61 +18,50 @@ type Node
 	y::Int64
 	costf::Float64
 	costg::Float64
-	unblocked::Bool
 	pInd::Int64
 end
 
-"Heuristic Estimate Cost - Euclidean Distance"
+#Heuristic Estimate Cost - Euclidean Distance
 function calc_h(x::Int64, y::Int64, goalX::Int64, goalY::Int64)
 	return sqrt((x-goalX)^2 + (y-goalY)^2)
+	#return max((x-goalX), (y-goalY))
 end
 
-function verifyNode(node::Node, xMax::Int64, yMax::Int64)
-	if (node.x < 1 || node.x > xMax || node.y < 1 || node.y > yMax) 
-		return false
-	end
-	return node.unblocked
-end
-
-function isValid(x::Int64, y::Int64)
-	if (x < 1 || x > xMax || y < 1 || y > yMax)
+function isValid(x::Int64, y::Int64, Grid)
+	if (x < 1 || x > xMax || y < 1 || y > yMax ||
+		Grid[x,y] == false)
 		return false
 	end
 	return true
 end
 
-#@To-DO find a better way to implement
-function findNextStep(Open_List, Grid)
-	minNode = Node(0,0,Inf,Inf,false,0)
-	for i = 1:xMax
-		for j = 1:yMax
-			if (Open_List[i,j] == true 
-				&& minNode.costf > Grid[i,j].costf)
-				minNode = Grid[i,j]
-			end
-		end
-	end
-
-	return minNode
-end
-
 function evaluateNextNode(xOld::Int64, yOld::Int64, 
 							xNew::Int64, yNew::Int64, 
-							Adjacent::Bool, Open_List)
+							Adjacent::Bool, Open_List,
+							pq, currentNode, cIndex:: Int64, 
+							newIndex::Int64)
 	if (Adjacent == true)
 		addG = 1
     else
     	addG = sqrt(2)
     end
-	gNew = Grid[xOld, yOld].costg + addG
-    fNew = gNew + calc_h(xNew, yNew, goalX, goalY)
-	if (Grid[xNew, yNew].costf > fNew)
-		Open_List[xNew, yNew] = true
-        Grid[xNew, yNew].costf = fNew
-        Grid[xNew, yNew].costg = gNew
-        Grid[xNew, yNew].pInd = calc_Index(xOld,yOld)
-    end
+    
+    gNew = currentNode.costg + addG
+   	fNew = gNew + calc_h(xNew, yNew, goalX, goalY)
 
+    if (!haskey(Open_List, newIndex))
+    	newNode = Node(xNew, yNew, gNew, fNew, cIndex)
+    	Open_List[newIndex] = newNode
+    	enqueue!(pq, newIndex, newNode.costf)
+    else
+    	newNode = Open_List[newIndex]
+		if (newNode.costf > fNew)
+        	newNode.costf = fNew
+        	newNode.costg = gNew
+        	newNode.pInd = cIndex
+        	pq[newIndex] = fNew
+    	end
+    end
 end
 
 function isDestination(x::Int64,y::Int64)
@@ -79,14 +69,16 @@ function isDestination(x::Int64,y::Int64)
 end
 
 function a_StarSearch(xMax::Int64, yMax::Int64, sourceX::Int64, sourceY::Int64, 
-				goalX::Int64, goalY::Int64, Grid::Array{Node})
+				goalX::Int64, goalY::Int64, Grid::Array{Int64})
 
-	if (isValid(sourceX,sourceY) == false)
+	if (isValid(sourceX,sourceY,Grid) == false)
 		println("Source is not valid on Grid.")
+		return
 	end
 
-	if (isValid(goalX,goalY) == false)
+	if (isValid(goalX,goalY,Grid) == false)
 		println("Goal is not valid on Grid.")
+		return
 	end
 
 	if (sourceX == goalX && sourceY == goalY)
@@ -94,24 +86,28 @@ function a_StarSearch(xMax::Int64, yMax::Int64, sourceX::Int64, sourceY::Int64,
 		return
 	end
 
-	Open_List = falses(xMax,yMax)
-	Closed_List = falses(xMax,yMax)
+	goalN = Node(goalX, goalY, 0, 0, -1) #initiallize goal node
+	sourceN = Node(sourceX, sourceY, 0, 0,-1) #initialize source node
+	cIndex = Index(sourceX,sourceY)
 
-	i = sourceX
-	j = sourceY
-	Grid[i,j].costf = 0
-	Grid[i,j].costg = 0
-	Open_List[i,j] = true
+	Open_List, Closed_List = Dict{Int64,Node}(), Dict{Int64,Node}()
+	Open_List[cIndex] = sourceN
 
-	while (Open_List != falses(xMax,yMax))
+	pq = PriorityQueue()
+	enqueue!(pq, cIndex, 0)
+	
+	println("Printing expanded nodes:")
+	while (length(Open_List) > 0)
 
-		currentNode = findNextStep(Open_List, Grid) #pull lowest costing open Node
+		cIndex = dequeue!(pq) #pull lowest costing open Node
+		currentNode = Open_List[cIndex]
+		delete!(Open_List, cIndex)
+	    Closed_List[cIndex] = currentNode
+
 	    i = currentNode.x
 	    j = currentNode.y
-
-	    Open_List[i,j] = false
-	    Closed_List[i,j] = true
-
+	    println(i,j)
+	    
 	    #Check Next Nodes
 	   	for iNew = i-1:i+1
 	   		for jNew = j-1:j+1
@@ -123,18 +119,19 @@ function a_StarSearch(xMax::Int64, yMax::Int64, sourceX::Int64, sourceY::Int64,
 	   				Adjacent = false
 	   			end
 
-    			if (isValid(iNew, jNew))
-    				if (Closed_List[iNew, jNew] == false && 
-        						Grid[iNew, jNew].unblocked == true)
-        				evaluateNextNode(i, j, iNew, jNew, Adjacent, Open_List)
+    			if (isValid(iNew, jNew, Grid))
+    				newIndex = Index(iNew,jNew)
+    				if (!haskey(Closed_List, newIndex))
+        				evaluateNextNode(i, j, iNew, jNew, Adjacent, Open_List, pq,
+        					currentNode, cIndex, newIndex)
         			end
 
         			if (isDestination(iNew, jNew))
-        				println("Goal Found")
-        				println("Printing Path")
-        				printMap()
-        				println("Printing Searched Nodes")
-        				println(Closed_List)
+        				println("Goal Found!")
+        				println("Printing Path:")
+        				goalN.pInd = cIndex
+        				Closed_List[Index(goalN.x,goalN.y)] = goalN
+        				printMap(Closed_List)
         				return
         			end
         		end
@@ -147,45 +144,40 @@ function a_StarSearch(xMax::Int64, yMax::Int64, sourceX::Int64, sourceY::Int64,
 
 end
 
-function calc_Index(x::Int64, y::Int64)
+function Index(x::Int64, y::Int64)
 	index = (xMax*y - (xMax-x))
 	return index
 end
 
-function printMap()
+function printMap(Closed_List)
 	s = []
-	index = calc_Index(goalX,goalY)
-	while(true)
+	index = Index(goalX,goalY)
+	while(index != Index(sourceX,sourceY))
 		push!(s,index)
-		if index == calc_Index(sourceX,sourceY)
-			break
-		else index = Grid[index].pInd
-		end
+		index = Closed_List[index].pInd
 	end
-
+	push!(s,index)
 	while(!isempty(s))
 		index = pop!(s)
 		println(index)
 	end
-	return
 end
 
-function constructGrid(map::Array{Int64})
-	Grid = Array{Node}(xMax, yMax)
-	for i=1:xMax
-		for j=1:yMax
-			Grid[i,j] = Node(i,j,Inf,Inf,map[i,j],-1)
-		end
-	end
-	return Grid
-end
-
+# Build Test Cases
 Open = [1 0 1 1;
-		1 0 1 1;
 		1 1 1 1;
-		1 0 1 1]
-Grid = constructGrid(Open)
+		1 1 0 1;
+		1 0 1 1] #goes backwards because of heuristic.
+#
+
+Open = [1 0 1 0 1 1 1;
+		1 1 1 0 0 0 1;
+		0 1 0 1 0 1 0;
+		0 1 1 1 1 0 1] #Interesting path due to heuristic. Would work with different one.
+
+xMax = size(Open,1)
+yMax = size(Open,2)
 a_StarSearch(xMax, yMax, sourceX, sourceY, 
-				goalX, goalY, Grid)
+				goalX, goalY, Open)
 
 end #module
