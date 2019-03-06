@@ -2,8 +2,6 @@ module a_Star
 
 using DataStructures
 using NearestNeighbors
-using PyPlot
-#using Plots
 
 "Key coordinates"
 sourceX = 1 #row
@@ -234,20 +232,24 @@ Open = [1 0 1 0 1 1 1;
         push!(oy, 60.0-Float64(i))
     end
 
-vr = 5
+vr = 0
 Open = initializeObstacles(ox, oy, vr)
 
 
-px, py, ex, ey = a_StarSearch(xMax, yMax, sourceX, sourceY, 
+@time px, py, ex, ey = a_StarSearch(xMax, yMax, sourceX, sourceY, 
 				goalX, goalY, Open)
- plot(ox, oy, ".k",label="obstacles")
- plot(sourceX, sourceY, "xr",label="start")
- plot(goalX, goalY, "xb",label="goal")
- plot(px, py, "-r",label="A* path")
 
-#display(plot(ex,ey,seriestype=:scatter,title="My Scatter Plot"))
-legend()
-grid(true)
-axis("equal")
-show()
+# using PyPlot
+# plot(ox, oy, ".k",label="obstacles")
+# plot(sourceX, sourceY, "xr",label="start")
+# plot(goalX, goalY, "xb",label="goal")
+# plot(px, py, "-r",label="A* path")
+# legend()
+# grid(true)
+# axis("equal")
+# show()
+
+using Plots
+display(plot(ex,ey,seriestype=:scatter,title="Expanded Nodes"))
+
 end #module
